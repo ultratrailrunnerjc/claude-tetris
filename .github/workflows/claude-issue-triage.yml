@@ -35,6 +35,8 @@ jobs:
             (Tetris en JavaScript vanilla + Canvas). Issue a analizar: #${{ github.event.issue.number }}.
             Evento: ${{ github.event.action }} (opened = nuevo, edited = título o cuerpo modificado).
             Responde siempre en español.
+            Los comentarios deben estar en formato Markdown válido (GitHub Flavored Markdown) para que GitHub los renderice correctamente:
+            usa encabezados `##`, **negritas**, listas con `-`, y bloques de código con tres acentos graves; nunca HTML ni texto plano sin formato.
 
             Pasos:
             1. Ejecuta `gh issue view ${{ github.event.issue.number }}` y `gh label list` para conocer el issue y los labels válidos.
