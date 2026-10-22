@@ -17,7 +17,7 @@
   --grid: #22222e;
   --highlight: rgba(255, 255, 255, 0.12);
   --c1: #4dd0e1; --c2: #ffd54f; --c3: #ba68c8; --c4: #81c784;
-  --c5: #e57373; --c6: #90caf9; --c7: #ffb74d;
+  --c5: #e57373; --c6: #90caf9; --c7: #ffb74d; --c8: #b0bec5;
 }
 
 [data-theme="light"] {
@@ -39,7 +39,7 @@
   --grid: #e3e5ee;
   --highlight: rgba(255, 255, 255, 0.3);
   --c1: #00acc1; --c2: #f9a825; --c3: #8e24aa; --c4: #43a047;
-  --c5: #e53935; --c6: #1e88e5; --c7: #fb8c00;
+  --c5: #e53935; --c6: #1e88e5; --c7: #fb8c00; --c8: #607d8b;
 }
 
 *, *::before, *::after {

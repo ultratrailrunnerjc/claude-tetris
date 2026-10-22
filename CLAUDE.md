@@ -17,7 +17,7 @@ python3 -m http.server 8000   # luego http://localhost:8000
 ## Arquitectura (`game.js`)
 
 - Todo el estado es global a nivel de módulo (`board`, `current`, `next`, `score`, `lines`, `level`, `paused`, `gameOver`, `dropInterval`, ...) y se reinicia en `init()`, que también sirve de reinicio desde el botón de Game Over.
-- `board` es una matriz `ROWS × COLS` con `0` (vacía) o un índice 1–7 que indexa a la vez `COLORS` y `PIECES` (índice 0 = `null` en ambos). Las piezas guardan su propio índice en cada celda de `shape`.
+- `board` es una matriz `ROWS × COLS` con `0` (vacía) o un índice 1–8 (8 = tuerca 3×3 con hueco central) que indexa a la vez `COLORS` y `PIECES` (índice 0 = `null` en ambos). Las piezas guardan su propio índice en cada celda de `shape`.
 - Flujo de una pieza: `loop` (rAF, acumula `dropAccum` hasta `dropInterval`) o `softDrop`/`hardDrop` → `lockPiece()` → `merge()` → `clearLines()` (puntuación, nivel y `dropInterval` se recalculan aquí) → `spawn()`. Si la pieza nueva ya colisiona, `spawn()` llama a `endGame()`.
 - Rotación: `rotateCW` + `tryRotate` con wall kicks horizontales `[0, -1, 1, -2, 2]` (no hay kicks verticales ni rotación antihoraria).
 - Pausa y Game Over comparten el mismo `#overlay`; ambos cancelan el rAF (`cancelAnimationFrame(animId)`) y `togglePause` lo reanuda llamando a `loop` manualmente.
