@@ -8,6 +8,7 @@
 </head>
 <body>
   <div class="wrapper">
+    <button id="theme-toggle" type="button" aria-pressed="false" aria-label="Cambiar a modo claro">☀ Claro</button>
     <h1 class="title">TETRIS</h1>
 
     <div class="game-container">
@@ -54,6 +55,9 @@
     </div>
   </div>
 
+  <script>
+    try { if (localStorage.getItem('theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) {}
+  </script>
   <script src="game.js"></script>
 </body>
 </html>

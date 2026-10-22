@@ -4,16 +4,18 @@ const COLS = 10;
 const ROWS = 20;
 const BLOCK = 30;
 
-const COLORS = [
-  null,
-  '#4dd0e1', // I - cyan
-  '#ffd54f', // O - yellow
-  '#ba68c8', // T - purple
-  '#81c784', // S - green
-  '#e57373', // Z - red
-  '#90caf9', // J - pale blue
-  '#ffb74d', // L - orange
-];
+// Colores de piezas (I, O, T, S, Z, J, L) definidos en style.css como --c1..--c7
+let COLORS = [null];
+let gridColor = '#22222e';
+let highlightColor = 'rgba(255,255,255,0.12)';
+
+function readThemeColors() {
+  const cs = getComputedStyle(document.documentElement);
+  COLORS = [null];
+  for (let i = 1; i <= 7; i++) COLORS.push(cs.getPropertyValue(`--c${i}`).trim());
+  gridColor = cs.getPropertyValue('--grid').trim();
+  highlightColor = cs.getPropertyValue('--highlight').trim();
+}
 
 const PIECES = [
   null,
@@ -163,13 +165,13 @@ function drawBlock(context, x, y, colorIndex, size, alpha) {
   context.fillStyle = color;
   context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
   // highlight
-  context.fillStyle = 'rgba(255,255,255,0.12)';
+  context.fillStyle = highlightColor;
   context.fillRect(x * size + 1, y * size + 1, size - 2, 4);
   context.globalAlpha = 1;
 }
 
 function drawGrid() {
-  ctx.strokeStyle = '#22222e';
+  ctx.strokeStyle = gridColor;
   ctx.lineWidth = 0.5;
   for (let c = 1; c < COLS; c++) {
     ctx.beginPath();
@@ -300,5 +302,30 @@ document.addEventListener('keydown', e => {
 });
 
 restartBtn.addEventListener('click', init);
+
+const themeToggle = document.getElementById('theme-toggle');
+
+function applyTheme(theme) {
+  const light = theme === 'light';
+  if (light) document.documentElement.dataset.theme = 'light';
+  else delete document.documentElement.dataset.theme;
+  themeToggle.setAttribute('aria-pressed', String(light));
+  themeToggle.setAttribute('aria-label', light ? 'Cambiar a modo oscuro' : 'Cambiar a modo claro');
+  themeToggle.textContent = light ? '☾ Oscuro' : '☀ Claro';
+  readThemeColors();
+  // Redibuja también en pausa / game over, cuando el loop no corre
+  if (current && next) { draw(); drawNext(); }
+}
+
+themeToggle.addEventListener('click', () => {
+  const light = document.documentElement.dataset.theme !== 'light';
+  try { localStorage.setItem('theme', light ? 'light' : 'dark'); } catch (e) {}
+  applyTheme(light ? 'light' : 'dark');
+  themeToggle.blur(); // evita que Space/teclas del juego activen el botón
+});
+
+let savedTheme = null;
+try { savedTheme = localStorage.getItem('theme'); } catch (e) {}
+applyTheme(savedTheme === 'light' ? 'light' : 'dark');
 
 init();

@@ -173,9 +173,11 @@ Algunos parámetros fáciles de tunear en `game.js`:
 | `COLS`         | Columnas del tablero                     | `10`                  |
 | `ROWS`         | Filas del tablero                        | `20`                  |
 | `BLOCK`        | Tamaño en píxeles de cada celda          | `30`                  |
-| `COLORS`       | Paleta de colores por tipo de pieza      | 7 colores             |
+| `COLORS`       | Paleta por tipo de pieza (se lee de `--c1`…`--c7` en `style.css`) | 7 colores |
 | `LINE_SCORES`  | Puntos por 1, 2, 3 o 4 líneas eliminadas | `[0,100,300,500,800]` |
 | `dropInterval` | Velocidad inicial de caída en ms         | `1000`                |
+
+**Tema claro/oscuro:** el botón de la esquina superior derecha alterna entre ambos temas (oscuro por defecto; la elección se guarda en `localStorage`). Los colores son variables CSS en `:root` (oscuro) y `[data-theme="light"]` (claro) dentro de `style.css`.
 
 > Si cambias `COLS`, `ROWS` o `BLOCK`, recuerda ajustar también `width` y `height` del `<canvas id="board">` en `index.html` para que coincida (`COLS × BLOCK` × `ROWS × BLOCK`).
 
