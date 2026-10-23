@@ -4,11 +4,23 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tetris</title>
+  <script>
+    // Aplica el skin guardado antes de pintar para evitar parpadeo
+    try { document.documentElement.dataset.skin = localStorage.getItem('skin') || 'retro'; } catch (e) {}
+  </script>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div class="wrapper">
     <button id="theme-toggle" type="button" aria-pressed="false" aria-label="Cambiar a modo claro">☀ Claro</button>
+    <div id="skin-picker">
+      <select id="skin-select" aria-label="Skin visual">
+        <option value="retro">Retro</option>
+        <option value="neon">Neon</option>
+        <option value="pastel">Pastel</option>
+        <option value="pixel">Pixel art</option>
+      </select>
+    </div>
     <h1 class="title">TETRIS</h1>
 
     <div class="game-container">
