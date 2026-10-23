@@ -82,6 +82,17 @@
         <p id="overlay-score"></p>
         <div id="mode-menu" class="mode-menu hidden"></div>
         <div id="ability-menu" class="mode-menu hidden"></div>
+        <div id="records-panel" class="hidden">
+          <form id="record-form" class="hidden" onsubmit="return false">
+            <label for="name-input">¡Nuevo record! Tu nombre:</label>
+            <input id="name-input" type="text" maxlength="12" autocomplete="off" />
+            <button id="save-record-btn" type="button">Guardar</button>
+          </form>
+          <p class="records-title">RECORDS</p>
+          <div id="records"></div>
+          <p id="best-stats"></p>
+          <button id="reset-records-btn" type="button">Resetear records</button>
+        </div>
         <button id="restart-btn">Reintentar</button>
         <button id="menu-btn" type="button">Menú</button>
       </div>
