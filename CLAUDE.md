@@ -18,7 +18,7 @@ python3 -m http.server 8000   # luego http://localhost:8000
 
 - Todo el estado es global a nivel de módulo (`board`, `current`, `next`, `score`, `lines`, `level`, `paused`, `gameOver`, `dropInterval`, ...) y se reinicia en `init()`, que también sirve de reinicio desde el botón de Game Over.
 - `board` es una matriz `ROWS × COLS` con `0` (vacía) o un índice 1–8 (8 = tuerca 3×3 con hueco central) que indexa a la vez `COLORS` y `PIECES` (índice 0 = `null` en ambos). Las piezas guardan su propio índice en cada celda de `shape`.
-- Flujo de una pieza: `loop` (rAF, acumula `dropAccum` hasta `dropInterval`) o `softDrop`/`hardDrop` → `lockPiece()` → `merge()` → `clearLines()` (puntuación, nivel y `dropInterval` se recalculan aquí) → `spawn()`. Si la pieza nueva ya colisiona, `spawn()` llama a `endGame()`.
+- Flujo de una pieza: `loop` (rAF, acumula `dropAccum` hasta `dropInterval`) o `softDrop`/`hardDrop` → `lockPiece()` → `isTSpin()` → `merge()` → `clearLines()` (líneas, nivel y `dropInterval` se recalculan aquí; devuelve el nº de líneas) → `applyScore()` (puntuación, combo, B2B, Perfect Clear, popups y sonido) → `spawn()`. Si la pieza nueva ya colisiona, `spawn()` llama a `endGame()`.
 - Rotación: `rotateCW` + `tryRotate` con wall kicks horizontales `[0, -1, 1, -2, 2]` (no hay kicks verticales ni rotación antihoraria).
 - Pausa y Game Over comparten el mismo `#overlay`; ambos cancelan el rAF (`cancelAnimationFrame(animId)`) y `togglePause` lo reanuda llamando a `loop` manualmente.
 - El handler de `keydown` usa `e.code` (`ArrowLeft`, `KeyX`, `Space`, `KeyP`...), no `e.key`.
@@ -26,6 +26,7 @@ python3 -m http.server 8000   # luego http://localhost:8000
 ## Acoplamientos a tener en cuenta
 
 - Si cambias `COLS`, `ROWS` o `BLOCK`, ajusta `width`/`height` de `<canvas id="board">` en `index.html` (`COLS × BLOCK` por `ROWS × BLOCK`; actualmente 300×600). El canvas de la vista previa (`#next-canvas`) usa un tamaño de bloque fijo (`NB = 30`) dentro de `drawNext`, con una cuadrícula 4×4.
-- Los ids del DOM usados desde `game.js` (`board`, `next-canvas`, `score`, `lines`, `level`, `overlay`, `overlay-title`, `overlay-score`, `restart-btn`) deben existir en `index.html`.
+- Los ids del DOM usados desde `game.js` (`board`, `next-canvas`, `score`, `lines`, `level`, `overlay`, `overlay-title`, `overlay-score`, `restart-btn`, `combo`, `b2b`) deben existir en `index.html`.
 - La velocidad de caída está duplicada: `1000` inicial en `init()` y la fórmula `max(100, 1000 - (level - 1) * 90)` en `clearLines()`.
-- La puntuación por línea está en `LINE_SCORES` (multiplicada por `level`); soft drop suma 1 por fila y hard drop 2 por celda.
+- Puntuación (`applyScore`, todo × `level` previo a la limpieza): base `LINE_SCORES` o `TSPIN_SCORES` (T-spin = pieza T con rotación como último movimiento y ≥3 esquinas ocupadas; `lastMoveRotate` se pone a `false` en cualquier traslación), × 1.5 si B2B (Tetris/T-spin tras otro "difícil"), × `combo` (locks consecutivos que limpian), + `PC_SCORES` si el tablero queda vacío. Soft drop suma 1 por fila y hard drop 2 por celda.
+- Efectos: flash y popups se dibujan en `drawEffects()` (canvas, con `performance.now()`); el sonido se sintetiza con Web Audio (`tone`/`playSfx`), el `AudioContext` se crea en el primer `keydown`, y `KeyM` silencia (persistido en `localStorage`).

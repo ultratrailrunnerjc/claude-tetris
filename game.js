@@ -8,6 +8,8 @@ const BLOCK = 30;
 let COLORS = [null];
 let gridColor = '#22222e';
 let highlightColor = 'rgba(255,255,255,0.12)';
+let accentColor = '#7aa2f7';
+let bgColor = '#0f0f17';
 
 function readThemeColors() {
   const cs = getComputedStyle(document.documentElement);
@@ -15,6 +17,8 @@ function readThemeColors() {
   for (let i = 1; i <= 8; i++) COLORS.push(cs.getPropertyValue(`--c${i}`).trim());
   gridColor = cs.getPropertyValue('--grid').trim();
   highlightColor = cs.getPropertyValue('--highlight').trim();
+  accentColor = cs.getPropertyValue('--accent').trim();
+  bgColor = cs.getPropertyValue('--bg').trim();
 }
 
 const PIECES = [
@@ -30,6 +34,8 @@ const PIECES = [
 ];
 
 const LINE_SCORES = [0, 100, 300, 500, 800];
+const TSPIN_SCORES = [400, 800, 1200, 1600];
+const PC_SCORES = [0, 800, 1200, 1800, 2000];
 
 const canvas = document.getElementById('board');
 const ctx = canvas.getContext('2d');
@@ -38,12 +44,17 @@ const nextCtx = nextCanvas.getContext('2d');
 const scoreEl = document.getElementById('score');
 const linesEl = document.getElementById('lines');
 const levelEl = document.getElementById('level');
+const comboEl = document.getElementById('combo');
+const b2bEl = document.getElementById('b2b');
 const overlay = document.getElementById('overlay');
 const overlayTitle = document.getElementById('overlay-title');
 const overlayScore = document.getElementById('overlay-score');
 const restartBtn = document.getElementById('restart-btn');
 
 let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId;
+let combo, b2b, lastMoveRotate, popups, flashRows;
+let muted = false, audioCtx = null;
+try { muted = localStorage.getItem('muted') === '1'; } catch (e) {}
 
 function createBoard() {
   return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
@@ -84,6 +95,7 @@ function tryRotate() {
     if (!collide(rotated, current.x + kick, current.y)) {
       current.shape = rotated;
       current.x += kick;
+      lastMoveRotate = true;
       return;
     }
   }
@@ -97,6 +109,8 @@ function merge() {
 }
 
 function clearLines() {
+  const full = [];
+  for (let r = 0; r < ROWS; r++) if (board[r].every(v => v !== 0)) full.push(r);
   let cleared = 0;
   for (let r = ROWS - 1; r >= 0; r--) {
     if (board[r].every(v => v !== 0)) {
@@ -108,11 +122,12 @@ function clearLines() {
   }
   if (cleared) {
     lines += cleared;
-    score += (LINE_SCORES[cleared] || 0) * level;
     level = Math.floor(lines / 10) + 1;
     dropInterval = Math.max(100, 1000 - (level - 1) * 90);
-    updateHUD();
+    const t0 = performance.now();
+    flashRows = full.map(r => ({ r, t0 }));
   }
+  return cleared;
 }
 
 function ghostY() {
@@ -124,6 +139,7 @@ function ghostY() {
 function hardDrop() {
   const gy = ghostY();
   score += (gy - current.y) * 2;
+  if (gy > current.y) lastMoveRotate = false;
   current.y = gy;
   lockPiece();
 }
@@ -131,6 +147,7 @@ function hardDrop() {
 function softDrop() {
   if (!collide(current.shape, current.x, current.y + 1)) {
     current.y++;
+    lastMoveRotate = false;
     score += 1;
     updateHUD();
   } else {
@@ -138,9 +155,124 @@ function softDrop() {
   }
 }
 
+// T-spin de 3 esquinas: la T debe haber rotado como último movimiento
+function isTSpin() {
+  if (current.type !== 3 || !lastMoveRotate) return false;
+  const corners = [[0, 0], [2, 0], [0, 2], [2, 2]];
+  const filled = corners.filter(([dx, dy]) => collide([[1]], current.x + dx, current.y + dy));
+  return filled.length >= 3;
+}
+
+// ci: índice en COLORS; 0 = color de acento
+function addPopup(text, ci = 0) {
+  const now = performance.now();
+  const slot = popups.filter(p => now - p.t0 < 900).length;
+  popups.push({ text, ci, slot, t0: now });
+}
+
+function shake() {
+  canvas.classList.remove('shake');
+  void canvas.offsetWidth; // reinicia la animación
+  canvas.classList.add('shake');
+}
+
+function initAudio() {
+  try {
+    audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch (e) {}
+}
+
+function toggleMute() {
+  muted = !muted;
+  try { localStorage.setItem('muted', muted ? '1' : '0'); } catch (e) {}
+}
+
+function tone(freq, dur, type = 'square', delay = 0) {
+  if (muted || !audioCtx) return;
+  const t = audioCtx.currentTime + delay;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0.08, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + dur);
+}
+
+function playSfx(kind, n = 0) {
+  switch (kind) {
+    case 'clear':
+      tone(440, 0.12);
+      break;
+    case 'combo':
+      tone(440 * 2 ** (Math.min(n, 12) / 12), 0.15, 'triangle');
+      break;
+    case 'tspin':
+      tone(330, 0.12);
+      tone(495, 0.2, 'square', 0.1);
+      break;
+    case 'tetris':
+      [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.15, 'triangle', i * 0.07));
+      break;
+    case 'b2b':
+      tone(1319, 0.2, 'sine', 0.3);
+      break;
+    case 'perfect':
+      [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.25, 'square', i * 0.1));
+      break;
+  }
+}
+
+function applyScore(cleared, tspin, lvl) {
+  const names = ['', 'SINGLE', 'DOUBLE', 'TRIPLE', 'TETRIS'];
+  if (!cleared) {
+    combo = 0;
+    if (tspin) {
+      const pts = TSPIN_SCORES[0] * lvl;
+      score += pts;
+      addPopup('T-SPIN', 3);
+      addPopup(`+${pts.toLocaleString()}`);
+      playSfx('tspin');
+    }
+    updateHUD();
+    return;
+  }
+
+  combo++;
+  const hard = tspin || cleared === 4;
+  const b2bBonus = hard && b2b;
+  b2b = hard; // una limpieza normal (1–3 líneas sin T-spin) rompe el B2B
+  const base = tspin ? TSPIN_SCORES[cleared] : LINE_SCORES[cleared];
+  const perfect = board.every(row => row.every(v => !v));
+  const pts = (Math.round(base * (b2bBonus ? 1.5 : 1) * combo) + (perfect ? PC_SCORES[cleared] : 0)) * lvl;
+  score += pts;
+
+  if (tspin) addPopup(`T-SPIN ${names[cleared]}`, 3);
+  else if (cleared === 4) addPopup('TETRIS');
+  if (b2bBonus) addPopup('B2B', 1);
+  if (combo >= 2) addPopup(`COMBO x${combo}`);
+  if (perfect) addPopup('PERFECT CLEAR!', 2);
+  addPopup(`+${pts.toLocaleString()}`);
+
+  if (perfect) playSfx('perfect');
+  else if (tspin) playSfx('tspin');
+  else if (cleared === 4) playSfx('tetris');
+  else if (combo >= 2) playSfx('combo', combo);
+  else playSfx('clear');
+  if (b2bBonus) playSfx('b2b');
+  if (perfect || cleared === 4) shake();
+  updateHUD();
+}
+
 function lockPiece() {
+  const tspin = isTSpin();
+  const lvl = level; // la puntuación usa el nivel previo a la limpieza
   merge();
-  clearLines();
+  const cleared = clearLines();
+  applyScore(cleared, tspin, lvl);
   spawn();
 }
 
@@ -157,6 +289,8 @@ function updateHUD() {
   scoreEl.textContent = score.toLocaleString();
   linesEl.textContent = lines;
   levelEl.textContent = level;
+  comboEl.textContent = combo >= 2 ? `x${combo}` : '—';
+  b2bEl.classList.toggle('b2b-on', b2b);
 }
 
 function drawBlock(context, x, y, colorIndex, size, alpha) {
@@ -208,6 +342,39 @@ function draw() {
   for (let r = 0; r < current.shape.length; r++)
     for (let c = 0; c < current.shape[r].length; c++)
       drawBlock(ctx, current.x + c, current.y + r, current.shape[r][c], BLOCK);
+
+  drawEffects();
+}
+
+function drawEffects() {
+  const now = performance.now();
+
+  // flash de las filas recién limpiadas
+  flashRows = flashRows.filter(f => now - f.t0 < 200);
+  ctx.fillStyle = '#fff';
+  for (const f of flashRows) {
+    ctx.globalAlpha = 0.6 * (1 - (now - f.t0) / 200);
+    ctx.fillRect(0, f.r * BLOCK, COLS * BLOCK, BLOCK);
+  }
+  ctx.globalAlpha = 1;
+
+  // textos flotantes
+  popups = popups.filter(p => now - p.t0 < 900);
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 22px system-ui, sans-serif';
+  ctx.lineWidth = 4;
+  ctx.lineJoin = 'round';
+  for (const p of popups) {
+    const age = (now - p.t0) / 900;
+    const x = canvas.width / 2;
+    const y = canvas.height / 3 + p.slot * 28 - age * 30;
+    ctx.globalAlpha = Math.min(1, 2 * (1 - age));
+    ctx.strokeStyle = bgColor;
+    ctx.strokeText(p.text, x, y);
+    ctx.fillStyle = p.ci ? COLORS[p.ci] : accentColor;
+    ctx.fillText(p.text, x, y);
+  }
+  ctx.globalAlpha = 1;
 }
 
 function drawNext() {
@@ -251,6 +418,7 @@ function loop(ts) {
     dropAccum = 0;
     if (!collide(current.shape, current.x, current.y + 1)) {
       current.y++;
+      lastMoveRotate = false;
     } else {
       lockPiece();
     }
@@ -262,6 +430,11 @@ function loop(ts) {
 
 function init() {
   board = createBoard();
+  combo = 0;
+  b2b = false;
+  lastMoveRotate = false;
+  popups = [];
+  flashRows = [];
   score = 0;
   lines = 0;
   level = 1;
@@ -279,14 +452,16 @@ function init() {
 }
 
 document.addEventListener('keydown', e => {
+  initAudio();
   if (e.code === 'KeyP') { togglePause(); return; }
+  if (e.code === 'KeyM') { toggleMute(); return; }
   if (paused || gameOver) return;
   switch (e.code) {
     case 'ArrowLeft':
-      if (!collide(current.shape, current.x - 1, current.y)) current.x--;
+      if (!collide(current.shape, current.x - 1, current.y)) { current.x--; lastMoveRotate = false; }
       break;
     case 'ArrowRight':
-      if (!collide(current.shape, current.x + 1, current.y)) current.x++;
+      if (!collide(current.shape, current.x + 1, current.y)) { current.x++; lastMoveRotate = false; }
       break;
     case 'ArrowDown':
       softDrop();
