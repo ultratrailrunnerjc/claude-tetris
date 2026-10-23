@@ -67,7 +67,7 @@
             <li><kbd>↑</kbd> rotar</li>
             <li><kbd>↓</kbd> bajar</li>
             <li><kbd>Space</kbd> caída</li>
-            <li><kbd>P</kbd> pausa</li>
+            <li><kbd>P</kbd>/<kbd>Esc</kbd> pausa</li>
             <li><kbd>E</kbd> habilidad</li>
             <li><kbd>C</kbd>/<kbd>Shift</kbd> reserva</li>
             <li><kbd>M</kbd> sonido</li>
@@ -82,6 +82,19 @@
         <p id="overlay-score"></p>
         <div id="mode-menu" class="mode-menu hidden"></div>
         <div id="ability-menu" class="mode-menu hidden"></div>
+        <div id="pause-menu" class="pause-menu hidden">
+          <button id="resume-btn" type="button">Reanudar</button>
+          <button id="pause-restart-btn" type="button">Reiniciar</button>
+          <button id="controls-btn" type="button">Ver controles</button>
+          <div id="controls-help" class="hidden"></div>
+          <div class="level-picker">
+            <span>Nivel inicial</span>
+            <button id="level-down" type="button" aria-label="Bajar nivel inicial">−</button>
+            <span id="start-level">1</span>
+            <button id="level-up" type="button" aria-label="Subir nivel inicial">+</button>
+          </div>
+          <button id="pause-menu-btn" type="button">Menú</button>
+        </div>
         <button id="restart-btn">Reintentar</button>
         <button id="menu-btn" type="button">Menú</button>
       </div>

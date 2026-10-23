@@ -77,6 +77,11 @@ const energyBar = document.getElementById('energy-bar');
 const energyFill = document.getElementById('energy-fill');
 const abilityStatusEl = document.getElementById('ability-status');
 const abilityMenu = document.getElementById('ability-menu');
+const pauseMenu = document.getElementById('pause-menu');
+const startLevelEl = document.getElementById('start-level');
+const controlsHelp = document.getElementById('controls-help');
+let startLevel = 1;
+let runBaseLevel = 1; // nivel inicial de la partida en curso (fijado en init)
 
 let board, current, queue, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId;
 let combo, b2b, lastMoveRotate, popups, flashRows;
@@ -238,6 +243,10 @@ function merge() {
         board[current.y + r][current.x + c] = current.shape[r][c];
 }
 
+function speedFor(lvl) {
+  return Math.max(100, 1000 - (lvl - 1) * 90);
+}
+
 function clearLines() {
   const full = [];
   for (let r = 0; r < ROWS; r++) if (board[r].every(v => v !== 0)) full.push(r);
@@ -252,8 +261,8 @@ function clearLines() {
   }
   if (cleared) {
     lines += cleared;
-    level = Math.floor(lines / 10) + 1;
-    dropInterval = Math.max(100, 1000 - (level - 1) * 90);
+    level = runBaseLevel + Math.floor(lines / 10);
+    dropInterval = speedFor(level);
     const t0 = performance.now();
     flashRows = full.map(r => ({ r, t0 }));
   }
@@ -796,6 +805,7 @@ function endGame(won = false) {
   overlayTitle.classList.toggle('win', won);
   overlayScore.textContent = `Puntuación: ${score.toLocaleString()}` + (classic ? '' : ` · ${fmtTime(elapsed)}`);
   modeMenu.classList.add('hidden');
+  pauseMenu.classList.add('hidden');
   restartBtn.classList.remove('hidden');
   menuBtn.classList.remove('hidden');
   overlay.classList.remove('hidden');
@@ -809,6 +819,7 @@ function showMenu() {
   overlayTitle.classList.remove('win');
   overlayScore.textContent = '';
   modeMenu.classList.remove('hidden');
+  pauseMenu.classList.add('hidden');
   restartBtn.classList.add('hidden');
   menuBtn.classList.add('hidden');
   overlay.classList.remove('hidden');
@@ -818,12 +829,23 @@ function togglePause() {
   if (gameOver) return;
   paused = !paused;
   if (!paused) {
+    pauseMenu.classList.add('hidden');
+    restartBtn.classList.remove('hidden');
+    menuBtn.classList.remove('hidden');
+    overlay.classList.add('hidden');
+    document.activeElement?.blur(); // evita que Space reactive el botón pulsado
     lastTime = performance.now();
     loop(lastTime);
   } else {
     cancelAnimationFrame(animId);
     overlayTitle.textContent = 'PAUSA';
+    overlayTitle.classList.remove('win');
     overlayScore.textContent = '';
+    modeMenu.classList.add('hidden');
+    abilityMenu.classList.add('hidden');
+    restartBtn.classList.add('hidden');
+    menuBtn.classList.add('hidden');
+    pauseMenu.classList.remove('hidden');
     overlay.classList.remove('hidden');
   }
 }
@@ -879,6 +901,7 @@ function init(key = modeKey) {
   abilityMenu.classList.add('hidden');
   overlayTitle.classList.remove('win');
   modeMenu.classList.add('hidden');
+  pauseMenu.classList.add('hidden');
   restartBtn.classList.remove('hidden');
   menuBtn.classList.remove('hidden');
   combo = 0;
@@ -888,10 +911,11 @@ function init(key = modeKey) {
   flashRows = [];
   score = 0;
   lines = 0;
-  level = 1;
+  runBaseLevel = baseLevel();
+  level = runBaseLevel;
   paused = false;
   gameOver = false;
-  dropInterval = 1000;
+  dropInterval = speedFor(level);
   dropAccum = 0;
   lastTime = performance.now();
   queue = Array.from({ length: 5 }, randomPiece);
@@ -907,7 +931,7 @@ function init(key = modeKey) {
 document.addEventListener('keydown', e => {
   initAudio();
   if (choosing) { onChoiceKey(e); return; }
-  if (e.code === 'KeyP') { togglePause(); return; }
+  if (e.code === 'KeyP' || e.code === 'Escape') { if (!e.repeat) togglePause(); return; }
   if (e.code === 'KeyM') { toggleMute(); return; }
   if (paused || gameOver) return;
   switch (e.code) {
@@ -953,6 +977,38 @@ for (const [key, m] of Object.entries(MODES)) {
   btn.append(name, desc);
   btn.addEventListener('click', () => { btn.blur(); init(key); });
   modeMenu.append(btn);
+}
+
+// ---- Menú de pausa ----
+function baseLevel() {
+  return modeKey === 'classic' ? startLevel : 1;
+}
+
+function setStartLevel(v) {
+  startLevel = Math.min(15, Math.max(1, v));
+  startLevelEl.textContent = startLevel;
+  try { localStorage.setItem('startLevel', String(startLevel)); } catch (e) {}
+}
+
+function pauseAction(fn) {
+  return () => { document.activeElement?.blur(); fn(); };
+}
+
+document.getElementById('resume-btn').addEventListener('click', pauseAction(togglePause));
+document.getElementById('pause-restart-btn').addEventListener('click', pauseAction(() => init()));
+document.getElementById('pause-menu-btn').addEventListener('click', pauseAction(showMenu));
+document.getElementById('controls-btn').addEventListener('click', () => {
+  const hidden = controlsHelp.classList.toggle('hidden');
+  document.getElementById('controls-btn').textContent = hidden ? 'Ver controles' : 'Ocultar controles';
+});
+document.getElementById('level-down').addEventListener('click', () => setStartLevel(startLevel - 1));
+document.getElementById('level-up').addEventListener('click', () => setStartLevel(startLevel + 1));
+{
+  const src = document.querySelector('.controls ul');
+  if (src) controlsHelp.append(src.cloneNode(true));
+  let saved = 1;
+  try { saved = parseInt(localStorage.getItem('startLevel'), 10) || 1; } catch (e) {}
+  setStartLevel(saved);
 }
 
 const themeToggle = document.getElementById('theme-toggle');
