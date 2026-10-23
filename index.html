@@ -12,6 +12,23 @@
     <h1 class="title">TETRIS</h1>
 
     <div class="game-container">
+      <aside class="panel panel-left">
+        <div class="panel-section">
+          <span class="label">ENERGÍA</span>
+          <div id="energy-bar"><div id="energy-fill"></div></div>
+          <span class="goal"><kbd>E</kbd> habilidad</span>
+          <span class="goal" id="ability-status"></span>
+        </div>
+        <div class="panel-section hidden" id="hold-section">
+          <span class="label">HOLD <kbd>C</kbd></span>
+          <canvas id="hold-canvas" width="120" height="120"></canvas>
+        </div>
+        <div class="panel-section hidden" id="queue-section">
+          <span class="label">PRÓXIMAS</span>
+          <canvas id="queue-canvas" width="60" height="240"></canvas>
+        </div>
+      </aside>
+
       <canvas id="board" width="300" height="600"></canvas>
 
       <aside class="panel">
@@ -51,6 +68,8 @@
             <li><kbd>↓</kbd> bajar</li>
             <li><kbd>Space</kbd> caída</li>
             <li><kbd>P</kbd> pausa</li>
+            <li><kbd>E</kbd> habilidad</li>
+            <li><kbd>C</kbd> reserva</li>
             <li><kbd>M</kbd> sonido</li>
           </ul>
         </div>
@@ -62,6 +81,7 @@
         <p id="overlay-title">GAME OVER</p>
         <p id="overlay-score"></p>
         <div id="mode-menu" class="mode-menu hidden"></div>
+        <div id="ability-menu" class="mode-menu hidden"></div>
         <button id="restart-btn">Reintentar</button>
         <button id="menu-btn" type="button">Menú</button>
       </div>

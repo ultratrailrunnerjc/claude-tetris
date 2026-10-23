@@ -153,7 +153,39 @@ body {
   opacity: 1;
 }
 
-#next-canvas {
+#energy-bar {
+  width: 100%;
+  height: 10px;
+  background: var(--kbd-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+#energy-fill {
+  width: 0;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s;
+}
+
+#energy-bar.full {
+  box-shadow: 0 0 10px var(--accent);
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  50% { box-shadow: 0 0 2px var(--accent); }
+}
+
+#hold-section.hidden,
+#queue-section.hidden {
+  display: none;
+}
+
+#next-canvas,
+#hold-canvas,
+#queue-canvas {
   display: block;
   border: 1px solid var(--border);
   background: var(--surface);
@@ -282,6 +314,15 @@ kbd {
 
 .mode-menu button:hover {
   border-color: var(--accent);
+}
+
+.mode-menu button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.mode-menu button:disabled:hover {
+  border-color: var(--border);
 }
 
 .mode-menu small {
