@@ -4,7 +4,8 @@ const COLS = 10;
 const ROWS = 20;
 const BLOCK = 30;
 
-// Colores de piezas (I, O, T, S, Z, J, L, N) definidos en style.css como --c1..--c8
+// Colores de piezas (I, O, T, S, Z, J, L, N) definidos en style.css como --c1..--c8;
+// --c9 (basura) y --c10 (bloques fijos) solo existen en COLORS, no en PIECES
 let COLORS = [null];
 let gridColor = '#22222e';
 let highlightColor = 'rgba(255,255,255,0.12)';
@@ -14,7 +15,7 @@ let bgColor = '#0f0f17';
 function readThemeColors() {
   const cs = getComputedStyle(document.documentElement);
   COLORS = [null];
-  for (let i = 1; i <= 8; i++) COLORS.push(cs.getPropertyValue(`--c${i}`).trim());
+  for (let i = 1; i <= 10; i++) COLORS.push(cs.getPropertyValue(`--c${i}`).trim());
   gridColor = cs.getPropertyValue('--grid').trim();
   highlightColor = cs.getPropertyValue('--highlight').trim();
   accentColor = cs.getPropertyValue('--accent').trim();
@@ -37,6 +38,17 @@ const LINE_SCORES = [0, 100, 300, 500, 800];
 const TSPIN_SCORES = [400, 800, 1200, 1600];
 const PC_SCORES = [0, 800, 1200, 1800, 2000];
 
+const GARBAGE = 9;
+const FIXED = 10;
+const FIXED_LAYOUT = [
+  '#...##...#',
+  '##..##..##',
+  '#.#....#.#',
+  '###.##.###',
+  '#.######.#',
+  '####..####',
+];
+
 const canvas = document.getElementById('board');
 const ctx = canvas.getContext('2d');
 const nextCanvas = document.getElementById('next-canvas');
@@ -50,11 +62,80 @@ const overlay = document.getElementById('overlay');
 const overlayTitle = document.getElementById('overlay-title');
 const overlayScore = document.getElementById('overlay-score');
 const restartBtn = document.getElementById('restart-btn');
+const menuBtn = document.getElementById('menu-btn');
+const modeMenu = document.getElementById('mode-menu');
+const modeNameEl = document.getElementById('mode-name');
+const goalEl = document.getElementById('goal');
 
 let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId;
 let combo, b2b, lastMoveRotate, popups, flashRows;
 let muted = false, audioCtx = null;
 try { muted = localStorage.getItem('muted') === '1'; } catch (e) {}
+
+let modeKey, mode, elapsed, garbageAccum, lockFade, reverseAnnounced, reveal;
+
+function fmtTime(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function countCells(v) {
+  return board.reduce((n, row) => n + row.filter(x => x === v).length, 0);
+}
+
+function isReversed() {
+  return !!mode.reverseFrom && level >= mode.reverseFrom;
+}
+
+function placeFixed() {
+  const top = ROWS - FIXED_LAYOUT.length;
+  FIXED_LAYOUT.forEach((row, i) => {
+    [...row].forEach((ch, c) => { if (ch === '#') board[top + i][c] = FIXED; });
+  });
+}
+
+// progress/won/failed leen el estado global; setup prepara el tablero inicial
+const MODES = {
+  classic: {
+    name: 'Clásico',
+    desc: 'Sin límite: consigue la máxima puntuación',
+  },
+  sprint: {
+    name: '40 líneas',
+    desc: 'Limpia 40 líneas en 2:00',
+    progress: () => `${lines}/40 · ${fmtTime(120000 - elapsed)}`,
+    won: () => lines >= 40,
+    failed: () => elapsed >= 120000,
+  },
+  garbage: {
+    name: 'Basura',
+    desc: 'Sobrevive 2:00; sube basura cada 10 s',
+    garbageEvery: 10000,
+    progress: () => `${fmtTime(120000 - elapsed)} · basura en ${Math.ceil((10000 - garbageAccum) / 1000)}s`,
+    won: () => elapsed >= 120000,
+  },
+  fixed: {
+    name: 'Bloques fijos',
+    desc: 'Elimina todos los bloques fijos',
+    setup: placeFixed,
+    progress: () => `Fijos: ${countCells(FIXED)}`,
+    won: () => countCells(FIXED) === 0,
+  },
+  invisible: {
+    name: 'Invisible',
+    desc: 'Las piezas desaparecen al fijarse. Limpia 20 líneas',
+    invisible: true,
+    progress: () => `${lines}/20`,
+    won: () => lines >= 20,
+  },
+  reverse: {
+    name: 'Rotación inversa',
+    desc: 'Desde el nivel 5 la rotación se invierte. Llega al nivel 10',
+    reverseFrom: 5,
+    progress: () => `Nivel ${level}/10${isReversed() ? ' · ⟲' : ''}`,
+    won: () => level >= 10,
+  },
+};
 
 function createBoard() {
   return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
@@ -88,8 +169,17 @@ function rotateCW(shape) {
   return result;
 }
 
+function rotateCCW(shape) {
+  const rows = shape.length, cols = shape[0].length;
+  const result = Array.from({ length: cols }, () => new Array(rows).fill(0));
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++)
+      result[cols - 1 - c][r] = shape[r][c];
+  return result;
+}
+
 function tryRotate() {
-  const rotated = rotateCW(current.shape);
+  const rotated = isReversed() ? rotateCCW(current.shape) : rotateCW(current.shape);
   const kicks = [0, -1, 1, -2, 2];
   for (const kick of kicks) {
     if (!collide(rotated, current.x + kick, current.y)) {
@@ -223,6 +313,45 @@ function playSfx(kind, n = 0) {
     case 'perfect':
       [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.25, 'square', i * 0.1));
       break;
+    case 'garbage':
+      tone(110, 0.2, 'sawtooth');
+      break;
+    case 'win':
+      [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.2, 'triangle', i * 0.09));
+      break;
+    case 'lose':
+      tone(392, 0.2, 'sawtooth');
+      tone(262, 0.35, 'sawtooth', 0.18);
+      break;
+    case 'reverse':
+      tone(659, 0.12, 'triangle');
+      tone(440, 0.2, 'triangle', 0.1);
+      break;
+  }
+}
+
+// Sube una fila de basura con un hueco aleatorio
+function addGarbage() {
+  if (board[0].some(v => v)) { endGame(false); return; }
+  const hole = Math.floor(Math.random() * COLS);
+  board.shift();
+  board.push(Array.from({ length: COLS }, (_, c) => (c === hole ? 0 : GARBAGE)));
+  if (collide(current.shape, current.x, current.y)) {
+    current.y--;
+    if (collide(current.shape, current.x, current.y)) { endGame(false); return; }
+  }
+  shake();
+  playSfx('garbage');
+  addPopup('¡BASURA!', GARBAGE);
+}
+
+function checkGoal() {
+  if (mode.won?.()) { endGame(true); return; }
+  if (mode.failed?.()) { endGame(false); return; }
+  if (isReversed() && !reverseAnnounced) {
+    reverseAnnounced = true;
+    addPopup('¡ROTACIÓN INVERSA!', 5);
+    playSfx('reverse');
   }
 }
 
@@ -270,9 +399,18 @@ function applyScore(cleared, tspin, lvl) {
 function lockPiece() {
   const tspin = isTSpin();
   const lvl = level; // la puntuación usa el nivel previo a la limpieza
+  if (mode.invisible) {
+    const cells = [];
+    current.shape.forEach((row, r) => row.forEach((v, c) => {
+      if (v) cells.push([current.x + c, current.y + r, v]);
+    }));
+    lockFade = { cells, t0: performance.now() };
+  }
   merge();
   const cleared = clearLines();
   applyScore(cleared, tspin, lvl);
+  checkGoal();
+  if (gameOver) return;
   spawn();
 }
 
@@ -291,6 +429,13 @@ function updateHUD() {
   levelEl.textContent = level;
   comboEl.textContent = combo >= 2 ? `x${combo}` : '—';
   b2bEl.classList.toggle('b2b-on', b2b);
+  modeNameEl.textContent = mode.name;
+  updateGoal();
+}
+
+function updateGoal() {
+  const text = mode.progress?.() ?? '—';
+  if (goalEl.textContent !== text) goalEl.textContent = text;
 }
 
 function drawBlock(context, x, y, colorIndex, size, alpha) {
@@ -326,10 +471,11 @@ function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawGrid();
 
-  // board
-  for (let r = 0; r < ROWS; r++)
-    for (let c = 0; c < COLS; c++)
-      drawBlock(ctx, c, r, board[r][c], BLOCK);
+  // board (en modo invisible solo se revela al terminar)
+  if (!mode.invisible || reveal)
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++)
+        drawBlock(ctx, c, r, board[r][c], BLOCK);
 
   // ghost
   const gy = ghostY();
@@ -357,6 +503,13 @@ function drawEffects() {
     ctx.fillRect(0, f.r * BLOCK, COLS * BLOCK, BLOCK);
   }
   ctx.globalAlpha = 1;
+
+  // fundido de la pieza recién fijada (modo invisible)
+  if (lockFade) {
+    const age = (now - lockFade.t0) / 400;
+    if (age >= 1) lockFade = null;
+    else for (const [x, y, ci] of lockFade.cells) drawBlock(ctx, x, y, ci, BLOCK, 1 - age);
+  }
 
   // textos flotantes
   popups = popups.filter(p => now - p.t0 < 900);
@@ -388,11 +541,30 @@ function drawNext() {
       drawBlock(nextCtx, offX + c, offY + r, shape[r][c], NB);
 }
 
-function endGame() {
+function endGame(won = false) {
   gameOver = true;
   cancelAnimationFrame(animId);
-  overlayTitle.textContent = 'GAME OVER';
-  overlayScore.textContent = `Puntuación: ${score.toLocaleString()}`;
+  const classic = modeKey === 'classic';
+  if (mode.invisible) { reveal = true; draw(); }
+  overlayTitle.textContent = won ? '¡DESAFÍO SUPERADO!' : classic ? 'GAME OVER' : 'DESAFÍO FALLIDO';
+  overlayTitle.classList.toggle('win', won);
+  overlayScore.textContent = `Puntuación: ${score.toLocaleString()}` + (classic ? '' : ` · ${fmtTime(elapsed)}`);
+  modeMenu.classList.add('hidden');
+  restartBtn.classList.remove('hidden');
+  menuBtn.classList.remove('hidden');
+  overlay.classList.remove('hidden');
+  if (!classic) playSfx(won ? 'win' : 'lose');
+}
+
+function showMenu() {
+  gameOver = true; // bloquea teclado y pausa mientras se elige modo
+  cancelAnimationFrame(animId);
+  overlayTitle.textContent = 'ELIGE MODO';
+  overlayTitle.classList.remove('win');
+  overlayScore.textContent = '';
+  modeMenu.classList.remove('hidden');
+  restartBtn.classList.add('hidden');
+  menuBtn.classList.add('hidden');
   overlay.classList.remove('hidden');
 }
 
@@ -414,6 +586,17 @@ function loop(ts) {
   const dt = ts - lastTime;
   lastTime = ts;
   dropAccum += dt;
+  // los relojes del modo ignoran saltos largos (pestaña en segundo plano)
+  const tdt = Math.min(dt, 250);
+  elapsed += tdt;
+  if (mode.garbageEvery) {
+    garbageAccum += tdt;
+    if (garbageAccum >= mode.garbageEvery) {
+      garbageAccum = 0;
+      addGarbage();
+      if (gameOver) return;
+    }
+  }
   if (dropAccum >= dropInterval) {
     dropAccum = 0;
     if (!collide(current.shape, current.x, current.y + 1)) {
@@ -423,13 +606,27 @@ function loop(ts) {
       lockPiece();
     }
   }
+  if (!gameOver) checkGoal();
   if (gameOver) return;
+  updateGoal();
   draw();
   animId = requestAnimationFrame(loop);
 }
 
-function init() {
+function init(key = modeKey) {
+  modeKey = key;
+  mode = MODES[key];
   board = createBoard();
+  mode.setup?.();
+  elapsed = 0;
+  garbageAccum = 0;
+  lockFade = null;
+  reverseAnnounced = false;
+  reveal = false;
+  overlayTitle.classList.remove('win');
+  modeMenu.classList.add('hidden');
+  restartBtn.classList.remove('hidden');
+  menuBtn.classList.remove('hidden');
   combo = 0;
   b2b = false;
   lastMoveRotate = false;
@@ -478,7 +675,20 @@ document.addEventListener('keydown', e => {
   updateHUD();
 });
 
-restartBtn.addEventListener('click', init);
+restartBtn.addEventListener('click', () => init());
+menuBtn.addEventListener('click', showMenu);
+
+for (const [key, m] of Object.entries(MODES)) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  const name = document.createElement('strong');
+  name.textContent = m.name;
+  const desc = document.createElement('small');
+  desc.textContent = m.desc;
+  btn.append(name, desc);
+  btn.addEventListener('click', () => { btn.blur(); init(key); });
+  modeMenu.append(btn);
+}
 
 const themeToggle = document.getElementById('theme-toggle');
 
@@ -505,4 +715,4 @@ let savedTheme = null;
 try { savedTheme = localStorage.getItem('theme'); } catch (e) {}
 applyTheme(savedTheme === 'light' ? 'light' : 'dark');
 
-init();
+showMenu();
