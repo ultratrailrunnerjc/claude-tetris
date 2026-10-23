@@ -661,7 +661,7 @@ function updateGoal() {
   if (goalEl.textContent !== text) goalEl.textContent = text;
 }
 
-function drawBlock(context, x, y, colorIndex, size, alpha) {
+function drawBlockRetro(context, x, y, colorIndex, size, alpha) {
   if (!colorIndex) return;
   const color = COLORS[colorIndex];
   context.globalAlpha = alpha ?? 1;
@@ -979,5 +979,101 @@ themeToggle.addEventListener('click', () => {
 let savedTheme = null;
 try { savedTheme = localStorage.getItem('theme'); } catch (e) {}
 applyTheme(savedTheme === 'light' ? 'light' : 'dark');
+
+// ---- Skins visuales ----
+const SKINS = ['retro', 'neon', 'pastel', 'pixel'];
+let skin = 'retro';
+
+function drawBlock(context, x, y, colorIndex, size, alpha) {
+  if (!colorIndex) return;
+  const a = alpha ?? 1;
+  if (skin === 'neon') drawBlockNeon(context, x, y, colorIndex, size, a);
+  else if (skin === 'pastel') drawBlockPastel(context, x, y, colorIndex, size, a);
+  else if (skin === 'pixel') drawBlockPixel(context, x, y, colorIndex, size, a);
+  else drawBlockRetro(context, x, y, colorIndex, size, a);
+}
+
+function drawBlockNeon(context, x, y, colorIndex, size, alpha) {
+  const color = COLORS[colorIndex];
+  const px = x * size + 2, py = y * size + 2, w = size - 4;
+  context.save();
+  context.globalAlpha = alpha;
+  if (alpha >= 1) { context.shadowBlur = 12; context.shadowColor = color; }
+  context.fillStyle = color;
+  context.globalAlpha = alpha * 0.25;
+  context.fillRect(px, py, w, w);
+  context.globalAlpha = alpha < 1 ? Math.max(alpha, 0.5) : 1; // el fantasma debe verse sobre fondo negro
+  context.strokeStyle = color;
+  context.lineWidth = 1.5;
+  context.strokeRect(px + 0.75, py + 0.75, w - 1.5, w - 1.5);
+  context.shadowBlur = 0;
+  context.restore();
+}
+
+function drawBlockPastel(context, x, y, colorIndex, size, alpha) {
+  const px = x * size + 1.5, py = y * size + 1.5, w = size - 3;
+  const r = Math.max(3, size * 0.25);
+  context.save();
+  context.globalAlpha = alpha;
+  context.fillStyle = COLORS[colorIndex];
+  context.beginPath();
+  if (context.roundRect) context.roundRect(px, py, w, w, r);
+  else {
+    context.moveTo(px + r, py);
+    context.arcTo(px + w, py, px + w, py + w, r);
+    context.arcTo(px + w, py + w, px, py + w, r);
+    context.arcTo(px, py + w, px, py, r);
+    context.arcTo(px, py, px + w, py, r);
+    context.closePath();
+  }
+  context.fill();
+  context.fillStyle = 'rgba(255,255,255,0.35)';
+  context.fillRect(px + r, py + 2, w - 2 * r, 3);
+  context.restore();
+}
+
+// Patrón 3x3: 1 = casilla clara, 2 = casilla oscura, 0 = sin textura
+const PIXEL_TEXTURE = [[1, 1, 0], [1, 0, 2], [0, 2, 2]];
+
+function drawBlockPixel(context, x, y, colorIndex, size, alpha) {
+  const px = x * size + 1, py = y * size + 1, w = size - 2;
+  const cell = w / 3;
+  context.save();
+  context.globalAlpha = alpha;
+  context.fillStyle = COLORS[colorIndex];
+  context.fillRect(px, py, w, w);
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      const t = PIXEL_TEXTURE[r][c];
+      if (!t) continue;
+      context.fillStyle = t === 1 ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)';
+      context.fillRect(px + c * cell, py + r * cell, cell, cell);
+    }
+  }
+  context.restore();
+}
+
+const skinSelect = document.getElementById('skin-select');
+
+function applySkin(name) {
+  skin = SKINS.includes(name) ? name : 'retro';
+  document.documentElement.dataset.skin = skin;
+  skinSelect.value = skin;
+  readThemeColors();
+  // Redibuja también en pausa / game over; sin partida activa no hay nada que pintar
+  if (current && queue) { draw(); drawNext(); drawHold(); }
+}
+
+skinSelect.addEventListener('change', () => {
+  applySkin(skinSelect.value);
+  try { localStorage.setItem('skin', skin); } catch (e) {}
+  skinSelect.blur(); // evita que las teclas del juego cambien la selección
+});
+
+skinSelect.addEventListener('keydown', (e) => { if (e.code === 'Escape') skinSelect.blur(); });
+
+let savedSkin = null;
+try { savedSkin = localStorage.getItem('skin'); } catch (e) {}
+applySkin(savedSkin);
 
 showMenu();
