@@ -73,7 +73,6 @@ const queueCtx = queueCanvas.getContext('2d');
 const queueSection = document.getElementById('queue-section');
 const holdCanvas = document.getElementById('hold-canvas');
 const holdCtx = holdCanvas.getContext('2d');
-const holdSection = document.getElementById('hold-section');
 const energyBar = document.getElementById('energy-bar');
 const energyFill = document.getElementById('energy-fill');
 const abilityStatusEl = document.getElementById('ability-status');
@@ -85,7 +84,7 @@ let muted = false, audioCtx = null;
 try { muted = localStorage.getItem('muted') === '1'; } catch (e) {}
 
 let modeKey, mode, elapsed, garbageAccum, lockFade, reverseAnnounced, reveal;
-let energy, peekUntil, slowUntil, holdUntil, held, holdUsed, undoSnap, choosing;
+let energy, peekUntil, slowUntil, held, holdUsed, undoSnap, choosing;
 
 function fmtTime(ms) {
   const s = Math.max(0, Math.ceil(ms / 1000));
@@ -172,11 +171,6 @@ const ABILITIES = [
     desc: 'Revierte la última colocación',
     available: () => !!undoSnap,
     use: undoLast,
-  },
-  {
-    name: 'Reserva',
-    desc: 'Tecla C: hold durante 30 s',
-    use: () => { holdUntil = elapsed + 30000; syncAbilityUI(); },
   },
 ];
 
@@ -377,6 +371,10 @@ function playSfx(kind, n = 0) {
       tone(659, 0.1, 'triangle');
       tone(988, 0.2, 'triangle', 0.1);
       break;
+    case 'hold':
+      tone(523, 0.06, 'triangle');
+      tone(392, 0.08, 'triangle', 0.05);
+      break;
     case 'ability':
       [392, 523, 659].forEach((f, i) => tone(f, 0.12, 'square', i * 0.06));
       break;
@@ -428,35 +426,29 @@ function undoLast() {
   lockFade = null;
   flashRows = [];
   lastMoveRotate = false;
-  holdUsed = false;
+  held = s.held;
+  holdUsed = s.holdUsed;
   dropAccum = 0;
   drawNext();
   drawHold();
 }
 
-// Hold: activo mientras dure la habilidad; al expirar solo permite sacar la pieza guardada
+// Hold: una vez por pieza; spawn() lo desbloquea al aparecer la siguiente
 function doHold() {
   if (holdUsed) return;
-  const active = elapsed < holdUntil;
-  if (!active && !held) return;
-  if (active && held === null) {
+  if (held === null) {
     held = current.type;
-    spawn();
-  } else if (active) {
+    spawn(); // entra la siguiente de la cola
+  } else {
     const t = held;
     held = current.type;
     current = makePiece(t);
     if (collide(current.shape, current.x, current.y)) endGame();
-  } else {
-    queue.unshift(makePiece(current.type));
-    queue.pop();
-    current = makePiece(held);
-    held = null;
-    if (collide(current.shape, current.x, current.y)) endGame();
   }
-  holdUsed = true;
+  holdUsed = true; // spawn() lo había puesto a false
   lastMoveRotate = false;
-  syncAbilityUI();
+  drawHold();
+  playSfx('hold');
 }
 
 function renderChoices(items, onPick) {
@@ -606,7 +598,7 @@ function lockPiece() {
   const lvl = level; // la puntuación usa el nivel previo a la limpieza
   undoSnap = {
     type: current.type, board: board.map(r => [...r]), queue: queue.slice(),
-    score, lines, level, dropInterval, combo, b2b,
+    score, lines, level, dropInterval, combo, b2b, held, holdUsed,
   };
   if (mode.invisible) {
     const cells = [];
@@ -652,7 +644,6 @@ function updateAbilityStatus() {
   const parts = [];
   if (elapsed < slowUntil) parts.push(`Lento ${left(slowUntil)}s`);
   if (elapsed < peekUntil) parts.push(`Ver ${left(peekUntil)}s`);
-  if (elapsed < holdUntil) parts.push(`Hold ${left(holdUntil)}s`);
   const text = parts.join(' · ');
   if (abilityStatusEl.textContent === text) return;
   abilityStatusEl.textContent = text;
@@ -661,7 +652,6 @@ function updateAbilityStatus() {
 
 function syncAbilityUI() {
   queueSection.classList.toggle('hidden', elapsed >= peekUntil);
-  holdSection.classList.toggle('hidden', elapsed >= holdUntil && !held);
   drawNext();
   drawHold();
 }
@@ -793,6 +783,7 @@ function drawNext() {
 
 function drawHold() {
   holdCtx.clearRect(0, 0, holdCanvas.width, holdCanvas.height);
+  holdCanvas.classList.toggle('locked', holdUsed);
   if (held) drawPreview(holdCtx, PIECES[held], 30, 0, holdUsed ? 0.4 : 1);
 }
 
@@ -880,7 +871,7 @@ function init(key = modeKey) {
   reverseAnnounced = false;
   reveal = false;
   energy = 0;
-  peekUntil = slowUntil = holdUntil = 0;
+  peekUntil = slowUntil = 0;
   held = null;
   holdUsed = false;
   undoSnap = null;
@@ -941,6 +932,8 @@ document.addEventListener('keydown', e => {
       openAbilityMenu();
       break;
     case 'KeyC':
+    case 'ShiftLeft':
+    case 'ShiftRight':
       doHold();
       break;
   }

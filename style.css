@@ -178,9 +178,16 @@ body {
   50% { box-shadow: 0 0 2px var(--accent); }
 }
 
-#hold-section.hidden,
 #queue-section.hidden {
   display: none;
+}
+
+#hold-canvas {
+  transition: opacity 0.15s;
+}
+
+#hold-canvas.locked {
+  opacity: 0.4;
 }
 
 #next-canvas,
